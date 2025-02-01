@@ -29,6 +29,8 @@
 
 #define MAXBUF 1024
 #define DEBUG_FLAG 1
+#define MAX_HANDLES 9
+#define MAX_HANDLE_LENGTH 100
 
 // ----- Lab Functions -----
 void clientControl(char *handle, int socketNum); 
@@ -38,16 +40,19 @@ int readFromStdin(uint8_t *buffer);
 void sendToServer(int socketNum);
 void checkArgs(int argc, char *argv[]);
 
+char handleNames[MAX_HANDLES][MAX_HANDLE_LENGTH];
+
 // ----- Chat Functions -----
 void initialPacket(int socketNum, char * handle);
 void sendMessage(char *handle, int socketNum, char* destination, char *message); 
 void broadcast(char *sendBuf); 
-void multicast(int numHandles, char handles[], char * text); 
+void sendMulticast(char *handle, int socketNum, int numHandles, char * message); 
 void ccListen(); 
 
-// ----- helper Functoins -----
+// ----- helper Functions -----
 void processCommand(char *handle, int socketNum, char cmdChar, char *text);
-bool  parseM(char *data, char *destinationHandle, char *message); 
+bool parseM(char *data, char *destinationHandle, char *message); 
+int parseC(char *data, char *message);  
 void processRecvMessage(uint8_t *pdu, int pduLen, int offset); 
 void processHandleError(uint8_t *pdu, int pduLen, int offset) ;
 
@@ -61,6 +66,7 @@ int main(int argc, char * argv[])
 	close(socketNum);
 	return 0;
 }
+
 
 void clientControl(char * handle, int socketNum){
 	initialPacket(socketNum, handle);
@@ -94,6 +100,7 @@ void clientControl(char * handle, int socketNum){
 	}
 }
 
+
 void initialPacket(int socketNum, char * handle){
     uint8_t handleLength = strlen(handle);
     uint16_t totalLength = 2 + handleLength;  // 1 bytes flag + 1 byte handle length + handle
@@ -116,6 +123,7 @@ void initialPacket(int socketNum, char * handle){
     }
 }
 
+
 void processStdin(char * handle, int socketNum){
 	uint8_t sendBuf[MAXBUF];   //data buffer
 	int sendLen = 0;        //amount of data to send
@@ -135,12 +143,14 @@ void processStdin(char * handle, int socketNum){
     }
 }
 
+
 void processCommand(char * handle, int socketNum, char cmdChar, char *data) {
+char message[MAXBUF];
+
     switch (cmdChar) {
         case 'M':
         case 'm':
             char destinationHandle[100];
-            char message[MAXBUF];
             if (parseM(data, destinationHandle, message)) {
                 printf("Dest Handle: %s\t Message: %s\n", destinationHandle, message);
                 sendMessage(handle, socketNum, destinationHandle, message);
@@ -149,8 +159,17 @@ void processCommand(char * handle, int socketNum, char cmdChar, char *data) {
 
         case 'C':
         case 'c':
-            
-            // multicast(0, 0, message);
+            int numHandles = parseC(data, message); 
+            if (numHandles > 0) {
+                // printf("Parsed data successfully. Number of handles: %d\n", numHandles);
+                // printf("Handles:\n");
+                // for (int i = 0; i < numHandles; ++i) {
+                //     printf("%s\n", handleNames[i]);
+                // }
+                // printf("Message: %s\n", message);
+                sendMulticast(handle, socketNum, numHandles, message);
+
+            }
             break;
 
         case 'B':
@@ -166,6 +185,90 @@ void processCommand(char * handle, int socketNum, char cmdChar, char *data) {
         default:
             printf("Invalid command: %c\n", cmdChar);
             break;
+    }
+}
+
+int parseC(char *data, char *message){
+    int numHandles = 0;
+    const char* token = strtok(data, " "); // First token, assumed to be the number of handles
+
+    if (token != NULL) {
+        numHandles = atoi(token); // Convert to integer
+        if (numHandles > MAX_HANDLES) {
+            printf("Error: Number of handles exceeds the maximum allowed.\n");
+            return 0;
+        }
+        if(numHandles < 2){
+            printf("Error: More than one handle is allowed.\n"); 
+            return 0; 
+        }
+
+        // Extract handle names
+        for (int i = 0; i < numHandles; ++i) {
+            token = strtok(NULL, " ");
+            if (token != NULL) {
+                strncpy(handleNames[i], token, MAX_HANDLE_LENGTH - 1);
+                handleNames[i][MAX_HANDLE_LENGTH - 1] = '\0'; // Ensure null termination
+            } else {
+                printf("Error: Not enough handle names provided.\n");
+                return 0;
+            }
+        }
+
+        // Extract the remaining part as the message
+        token = strtok(NULL, ""); // Get the rest of the input as the message
+        if (token != NULL) {
+            strncpy(message, token, MAXBUF - 1);
+            message[MAXBUF - 1] = '\0';
+        } else {
+            printf("Error: Message is missing.\n");
+            return 0;
+        }
+    }
+
+    return numHandles; // Return the number of handles parsed
+}
+
+void sendMulticast(char *handle, int socketNum, int numHandles, char * message){
+    uint8_t handleLength = strlen(handle);
+    uint8_t pdu[MAXBUF];
+    int pduLen = 0;
+
+    // ----- Insert Flag -----
+    pdu[0] = FLAG_MULTICAST; 
+    pduLen++; 
+
+    // ----- Sender: Handle Length, Handle Name -----
+    pdu[pduLen] = handleLength;
+	pduLen++;
+    memcpy(pdu + pduLen, handle, handleLength);
+    pduLen += handleLength; 
+
+    // ----- Number of Handles -----
+    pdu[pduLen] = numHandles;
+    pduLen++;
+
+    // ----- Handle Length and Handle Names  -----
+    int destinationHandleLength = 0; 
+    for(int i = 0; i < numHandles; i++){
+        destinationHandleLength = strlen(handleNames[i]);
+        pdu[pduLen] = destinationHandleLength; 
+        pduLen++; 
+        memcpy(pdu + pduLen, handleNames[i], destinationHandleLength); 
+        pduLen += destinationHandleLength; 
+        printf("Handle %d: %s (Length: %d)\n", i + 1, handleNames[i], destinationHandleLength);
+    }
+
+    // ----- Message -----
+    uint8_t messageLength = strlen(message); 
+    memcpy(pdu + pduLen, message, messageLength); 
+    pduLen += messageLength; 
+    pdu[pduLen] = '\0';
+
+    // ----- sendPDU -----
+    if (sendPDU(socketNum, pdu, pduLen) < 0) {
+        perror("Failed to send PDU");
+        exit(-1);
     }
 }
 
@@ -202,9 +305,10 @@ bool parseM(char *data, char *destinationHandle, char *message){
     return true; 
 }
 
+
+
 void sendMessage(char *handle, int socketNum, char *destinationHandle, char *message) {
     uint8_t handleLength = strlen(handle);
-    // uint16_t totalLength = 2 + handleLength;  // 1 bytes flag + 1 byte handle length + handle
     uint8_t pdu[MAXBUF];
     int pduLen = 0;
 
@@ -243,6 +347,7 @@ void sendMessage(char *handle, int socketNum, char *destinationHandle, char *mes
     }
 }
 
+
 int readFromStdin(uint8_t * buffer)
 {
 	char aChar = 0;
@@ -268,6 +373,7 @@ int readFromStdin(uint8_t * buffer)
 	return inputLen;
 }
 
+
 void checkArgs(int argc, char * argv[])
 {
 	/* check command line arguments  */
@@ -278,7 +384,7 @@ void checkArgs(int argc, char * argv[])
 	}
 
 	if(strlen(argv[1]) > 100){
-		printf("Handle must be 100 characters or less\n");
+		printf("Invalid handle, handle longer than 100 characters: <%s>\n", argv[1]);
 		exit(1);
 	}
 
@@ -291,7 +397,7 @@ void processMsgFromServer(int socketNum){
 	pduLen = recvPDU(socketNum, pdu, MAXBUF);
     if (pduLen == 0) {
         // Server closed the connection
-        printf("Server closed the connection.\n");
+        printf("---Server Terminated---\n");
         close(socketNum);
         exit(0);
     } else if (pduLen < 0) {
@@ -311,6 +417,7 @@ void processMsgFromServer(int socketNum){
 
         case FLAG_HANDLE_REJECT:
             printf("---Username take!---\n"); 
+            // Change to printf("Handle already in use: <%s>"); 
             break; 
 
         case FLAG_MESSAGE:
@@ -334,6 +441,7 @@ void processMsgFromServer(int socketNum){
             break; 
     }
 }
+
 
 void processRecvMessage(uint8_t *pdu, int pduLen, int offset){
     // ----- Sender: Handle Length, Handle name -----
@@ -364,6 +472,7 @@ void processRecvMessage(uint8_t *pdu, int pduLen, int offset){
     printf("\n%s: %s\n", senderHandle, message); 
 }
 
+
 void processHandleError(uint8_t *pdu, int pduLen, int offset){
     int handleLength = pdu[offset];
     offset++; 
@@ -373,7 +482,3 @@ void processHandleError(uint8_t *pdu, int pduLen, int offset){
 
     printf("Client with handle <%s> does not exist\n", handle); 
 }
-
-
-
-

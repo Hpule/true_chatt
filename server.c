@@ -29,7 +29,8 @@
 
 #define MAXBUF 1024
 #define DEBUG_FLAG 1
-
+#define MAX_HANDLES 9
+#define MAX_HANDLE_LENGTH 100
 
 void serverControl(int mainServerSocket); 
 void addNewSocket(int socketNumber); 
@@ -41,10 +42,11 @@ int isHandleTaken(HandleNode *head, const uint8_t *handle);
 void initialPacket(int clientSocket, uint8_t *pdu, int pduLen); 
 void processMessage(int clientSocket, uint8_t *pdu, int pduLen); 
 void processMulticast(int clientSocket, uint8_t *pdu, int pduLen); 
+void multiSend(); 
 
-
-
+char handleNames[MAX_HANDLES][MAX_HANDLE_LENGTH];
 HandleNode *handleHead = NULL; 
+
 
 int main(int argc, char *argv[])
 {
@@ -130,11 +132,17 @@ void processClient(int clientSocket){
             break;
 
         case FLAG_MULTICAST:
-            // processMulticast(); 
+            processMulticast(clientSocket, pdu, pduLen); 
+            break; 
+
         case FLAG_BROADCAST:
+
+            break; 
+
         case FLAG_REQUEST_LISTEN:
-            // Handle other flags as needed
+
             break;
+
         default:
             printf("Invalid flag: %d\n", flag);
             break;
@@ -142,8 +150,47 @@ void processClient(int clientSocket){
 }
 
 void processMulticast(int clientSocket, uint8_t *pdu, int pduLen){
+    // ----- Extract PDU details
+	int offset = 1;
 
+    // ----- Sender: Handle Length, Handle name -----
+    uint8_t senderHandleLength = pdu[offset];
+    offset++; 
+    uint8_t senderHandle[100];
+    memcpy(senderHandle, pdu + offset, senderHandleLength);
+    senderHandle[senderHandleLength] = '\0'; // Null-terminate for safety
+    offset += senderHandleLength; 
+    printf("Sender Handle: %s (Length: %u)\n", senderHandle, senderHandleLength);
+
+
+    // ----- Number of handles -----
+    int numHandles = pdu[offset]; 
+    offset++;
+    printf("Number of destination handles: %d\n", numHandles);
+
+
+    // ----- Destination:  Handle Lengths, Handle Names -----
+    int destinationHandleLength;
+    for (int i = 0; i < numHandles; i++) {
+        destinationHandleLength = pdu[offset];
+        offset++;
+        memcpy(handleNames[i], pdu + offset, destinationHandleLength);
+        handleNames[i][destinationHandleLength] = '\0'; // Null-terminate each handle name
+        offset += destinationHandleLength;
+
+        printf("Handle %d: %s (Length: %d)\n", i + 1, handleNames[i], destinationHandleLength);
+    }
+
+    // ------ Message -----
+    uint8_t messageLength = pdu[offset];
+    offset++; 
+    uint8_t message[100];    
+    memcpy(message, pdu + offset, messageLength); 
+    message[messageLength] = '\0'; 
+    printf("Message: %s (Length: %d)\n", message, messageLength);
 }
+
+
 
 void processMessage(int clientSocket, uint8_t *pdu, int pduLen){
     // ----- Extract PDU details
@@ -258,5 +305,3 @@ int checkArgs(int argc, char *argv[])
 	
 	return portNumber;
 }
-
-
