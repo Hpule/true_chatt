@@ -41,6 +41,7 @@ void sendToServer(int socketNum);
 void checkArgs(int argc, char *argv[]);
 
 char handleNames[MAX_HANDLES][MAX_HANDLE_LENGTH];
+bool waitingServerResponse = false; 
 
 // ----- Chat Functions -----
 void initialPacket(int socketNum, char * handle);
@@ -57,7 +58,6 @@ void processRecvMessage(uint8_t *pdu, int pduLen, int offset);
 void processHandleError(uint8_t *pdu, int pduLen, int offset) ;
 void processCount(uint8_t *pdu, int pduLen, int offset);
 void processHandle(uint8_t *pdu, int pduLen, int offset); 
-void processEnd(uint8_t *pdu, int pduLen, int offset); 
 
 int main(int argc, char * argv[])
 {
@@ -79,8 +79,9 @@ void clientControl(char * handle, int socketNum){
 	addToPollSet(socketNum); 	// Monitor server messages
 
 	while(1){
-		printf("$: "); // Display the prompt
-		fflush(stdout); // Flush the output buffer
+        if (!waitingServerResponse) {
+            printf("$: "); // Display the prompt only if not awaiting response
+        }		fflush(stdout); // Flush the output buffer
 		
 		int socketNumber = pollCall(-1); 
 		// printf("pollCall returned socketNumber: %d\n", socketNumber);
@@ -134,7 +135,10 @@ void processStdin(char * handle, int socketNum){
 	sendBuf[sendLen - 1] = '\0'; // Remove the trailing newline added by readFromStdin
 
 	// ----- Check Input -----
-    if (sendBuf[0] == '%' && sendBuf[2] == ' ') {
+    if(sendBuf[1] == 'l' || sendBuf[1] == 'L'){
+            waitingServerResponse = true; 
+            ccList(handle, socketNum);
+    } else if (sendBuf[0] == '%' && sendBuf[2] == ' ') {
 		// printf("Command detected.\n");
         char cmdChar = sendBuf[1]; // Assuming command is always one character
         char *message = (char *)sendBuf + 3; // Skipping "%X " to start text after space
@@ -171,7 +175,6 @@ char message[MAXBUF];
                 }
                 printf("Message: %s\n", message);
                 sendMulticast(handle, socketNum, numHandles, message);
-
             }
             break;
 
@@ -179,12 +182,6 @@ char message[MAXBUF];
         case 'b':
             // broadcast(message);
             break;
-
-        case 'L':
-        case 'l':
-            ccList(handle, socketNum);
-            break;
-
         default:
             printf("Invalid command: %c\n", cmdChar);
             break;
@@ -427,8 +424,7 @@ void processMsgFromServer(int socketNum){
 	uint8_t pdu[MAXBUF] = {0};
 	int pduLen = 0;
 	pduLen = recvPDU(socketNum, pdu, MAXBUF);
-    if (pduLen == 0) {
-        // Server closed the connection
+    if (pduLen == 0) {  // Server closed the connection
         printf("---Server Terminated---\n");
         close(socketNum);
         exit(0);
@@ -459,12 +455,15 @@ void processMsgFromServer(int socketNum){
             break; 
 
         case FLAG_LIST_COUNT:
+            processCount(pdu, pduLen, offset); 
             break; 
 
         case FLAG_LIST_HANDLE:
+            processHandle(pdu, pduLen, offset); 
             break; 
 
         case FLAG_LIST_END:
+            waitingServerResponse = false; 
             break; 
 
         default:
@@ -473,17 +472,18 @@ void processMsgFromServer(int socketNum){
 }
 
 void processCount(uint8_t *pdu, int pduLen, int offset){
-        
-    // printf("Number of Clients on server: %s\n"); 
+    uint32_t len = 0; 
+    len  = ntohl(*(uint32_t *)(pdu + offset));  // Convert from network byte order
+    printf("Number of Clients: %d\n", len); 
 }
 
 void processHandle(uint8_t *pdu, int pduLen, int offset){
-
-    // printf("Client: %s\n"); 
-
-}
-
-void processEnd(uint8_t *pdu, int pduLen, int offset){
+    uint8_t handleLen = pdu[offset]; 
+    uint8_t handle[100];
+    offset++; 
+    memcpy(handle, pdu + offset, handleLen); 
+    handle[handleLen] = '\0'; 
+    printf("\t%s\n", handle); 
 }
 
 void processRecvMessage(uint8_t *pdu, int pduLen, int offset){

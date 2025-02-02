@@ -136,11 +136,10 @@ void processClient(int clientSocket){
             break; 
 
         case FLAG_BROADCAST:
-            processList(clientSocket, pdu, pduLen); 
-
             break; 
 
         case FLAG_LIST:
+            processList(clientSocket, pdu, pduLen); 
 
             break;
 
@@ -152,36 +151,41 @@ void processClient(int clientSocket){
 
 void processList(int clientSocket, uint8_t *pdu, int pduLen){
     int handleCount = getNumHandles(handleHead);
+    printf("Starting to process the list of handles. Total handles: %d\n", handleCount);
 
     // Send the total number of handles
     uint32_t networkHandleCount = htonl(handleCount);  // Convert to network byte order
-    uint8_t buffer[1024];
+    uint8_t initialPdu[1024];
     int len = 0;
-
-    buffer[len++] = FLAG_LIST_COUNT;  // Flag = 11
-    memcpy(buffer + len, &networkHandleCount, sizeof(networkHandleCount));
+    initialPdu[len++] = FLAG_LIST_COUNT;  // Flag = 11
+    memcpy(initialPdu + len, &networkHandleCount, sizeof(networkHandleCount));
     len += sizeof(networkHandleCount);
-    sendPDU(clientSocket, buffer, len);
+    sendPDU(clientSocket, initialPdu, len);
+    printf("Sent count of handles to client: %u\n", handleCount);
 
     // Send each handle name
+    uint8_t handlePdu[MAXBUF];
     for (int i = 0; i < handleCount; i++) {
         const char *handle = getHandleByIndex(handleHead, i);
         if (handle) {
             len = 0;
-            buffer[len++] = FLAG_LIST_HANDLE;  // Flag = 12
+            handlePdu[len++] = FLAG_LIST_HANDLE;  // Flag = 12
             uint8_t handleLen = strlen(handle);
-            buffer[len++] = handleLen;
-            memcpy(buffer + len, handle, handleLen);
+            handlePdu[len++] = handleLen;
+            memcpy(handlePdu + len, handle, handleLen);
             len += handleLen;
-            sendPDU(clientSocket, buffer, len);
+            sendPDU(clientSocket, handlePdu, len);
+            printf("Sent handle [%d]: %s\n", i + 1, handle);
         }
     }
 
-    // Send end of list message
+    // Send end of list flag
+    uint8_t lastPdu[MAXBUF];
     len = 0;
-    buffer[len++] = FLAG_LIST_END;  // Flag = 13
-    sendPDU(clientSocket, buffer, len);  // No additional data needed for this message
-} 
+    lastPdu[len++] = FLAG_LIST_END;  // Flag = 13
+    sendPDU(clientSocket, lastPdu, len);  // No additional data needed for this message
+    printf("Sent end of handle list signal to client.\n");
+}
 
 
 void processMulticast(int clientSocket, uint8_t *pdu, int pduLen){
