@@ -43,6 +43,7 @@ void initialPacket(int clientSocket, uint8_t *pdu, int pduLen);
 void processMessage(int clientSocket, uint8_t *pdu, int pduLen); 
 void processMulticast(int clientSocket, uint8_t *pdu, int pduLen); 
 void processList(int clientSocket, uint8_t *pdu, int pduLen); 
+void processBroadcast(int clientSocket, uint8_t *pdu, int pduLen);
 
 void multiSend(); 
 
@@ -92,7 +93,6 @@ void addNewSocket(int socketNumber){
 }
 
 void processClient(int clientSocket){
-    // Calls recvPDU(), and outputs message
     printf("\nProcessing client on socket: %d\n", clientSocket);
     uint8_t pdu[MAXBUF];
     int pduLen = recvPDU(clientSocket, pdu, MAXBUF);
@@ -113,15 +113,7 @@ void processClient(int clientSocket){
         return;
     }
 
-// ----- Extract PDU details
     uint8_t flag = pdu[0];
-	int offset = 1;
-
-// ----- Sender: Handle Length, Handle name -----
-    uint8_t senderHandleLength = pdu[offset++];
-    uint8_t senderHandle[100];
-    memcpy(senderHandle, pdu + offset, senderHandleLength);
-    
     switch (flag) {
 		case FLAG_CLIENT_TO_SEVER_INITIAL:
             initialPacket(clientSocket, pdu, pduLen); 
@@ -136,11 +128,11 @@ void processClient(int clientSocket){
             break; 
 
         case FLAG_BROADCAST:
+            processBroadcast(clientSocket, pdu, pduLen); 
             break; 
 
         case FLAG_LIST:
             processList(clientSocket, pdu, pduLen); 
-
             break;
 
         default:
@@ -148,6 +140,64 @@ void processClient(int clientSocket){
             break;
     }    
 }
+
+void processBroadcast(int clientSocket, uint8_t *pdu, int pduLen){
+    int offset = 1;
+
+    // ----- Sender: Handle Length, Handle name -----
+    uint8_t senderHandleLength = pdu[offset++];
+    uint8_t senderHandle[100];
+    memcpy(senderHandle, pdu + offset, senderHandleLength);
+    senderHandle[senderHandleLength] = '\0';
+    offset += senderHandleLength; 
+    printf("Broadcast from [%s] (Length: %u)\n", senderHandle, senderHandleLength);
+
+    // ----- Message -----
+    uint8_t message[100];    
+    int messageLength = pduLen - offset;
+    memcpy(message, pdu + offset, messageLength); 
+    message[messageLength] = '\0'; 
+    printf("Message received: %s\n", message);
+
+    // Get current handles count and broadcast to all except sender
+    int handleCount = getNumHandles(handleHead);
+    printf("Total handles to receive broadcast: %d\n", handleCount);
+
+    for (int i = 0; i < handleCount; i++) {
+        const char *handle = getHandleByIndex(handleHead, i);
+        int destSocket = findSocketByHandle(handleHead, handle);
+
+        if (destSocket != clientSocket) { // Do not send back to the sender
+uint8_t handlePdu[MAXBUF];
+        int handlePduLen = 0;
+        handlePdu[handlePduLen++] = FLAG_MESSAGE;
+
+        // Include the sender handle
+        handlePdu[handlePduLen++] = senderHandleLength;
+        memcpy(handlePdu + handlePduLen, senderHandle, senderHandleLength);
+        handlePduLen += senderHandleLength;
+
+        handlePdu[handlePduLen++] = 1; 
+
+        // Include the destination handle
+        int destinationHandleLength = strlen(handle);
+        handlePdu[handlePduLen++] = destinationHandleLength;
+        memcpy(handlePdu + handlePduLen, handle, destinationHandleLength);
+        handlePduLen += destinationHandleLength;
+
+        // Include the message
+        memcpy(handlePdu + handlePduLen, message, pduLen - offset);
+        handlePduLen += pduLen - offset;
+
+        // Send the constructed PDU
+        int destSocket = findSocketByHandle(handleHead, handle);
+        printf("Sending multicast message to: %s (Socket: %d)\n", handle, destSocket);
+
+        sendPDU(destSocket, handlePdu, handlePduLen);
+        }
+    }
+}
+
 
 void processList(int clientSocket, uint8_t *pdu, int pduLen){
     int handleCount = getNumHandles(handleHead);
@@ -277,20 +327,20 @@ void processMulticast(int clientSocket, uint8_t *pdu, int pduLen){
 void processMessage(int clientSocket, uint8_t *pdu, int pduLen){
 	int offset = 1;
 
-    // ----- Sender: Handle Length, Handle name -----
+// ----- Sender: Handle Length, Handle name -----
     uint8_t senderHandleLength = pdu[offset];
     offset++; 
     uint8_t senderHandle[100];
     memcpy(senderHandle, pdu + offset, senderHandleLength);
 
-    // ----- Sender: Handle Length, Handle name -----
+// ----- Sender: Handle Length, Handle name -----
     offset += senderHandleLength; 
 
-    // ----- M and C bit -----
+// ----- M and C bit -----
     // uint8_t mcBit = pdu[offset]; 
     offset++; 
 
-    // ----- Destination:  Handle Length, Handle Name -----
+// ----- Destination:  Handle Length, Handle Name -----
     uint8_t destinationHandleLength = pdu[offset];
     offset++; 
     uint8_t destinationHandle[100];
@@ -298,7 +348,7 @@ void processMessage(int clientSocket, uint8_t *pdu, int pduLen){
     destinationHandle[destinationHandleLength] = '\0'; // Always NULL
     offset += destinationHandleLength; 
 
-    // ----- Check Destination Handle -----
+// ----- Check Destination Handle -----
     const char *handle = findHandle(handleHead, (char *)destinationHandle);
     printf("handle: %s, Dest handle: %s\n", handle, destinationHandle ); 
 

@@ -42,11 +42,13 @@ void checkArgs(int argc, char *argv[]);
 
 char handleNames[MAX_HANDLES][MAX_HANDLE_LENGTH];
 static bool waitForServerResponse = false;
+static bool displayPrompt = true;
+
 
 // ----- Chat Functions -----
 void initialPacket(int socketNum, char * handle);
 void sendMessage(char *handle, int socketNum, char* destination, char *message); 
-void broadcast(char *sendBuf); 
+void broadcast(char* handle, int socketNum, char *message); 
 void sendMulticast(char *handle, int socketNum, int numHandles, char * message); 
 void ccList(char *handle, int socketNum); 
 
@@ -93,12 +95,12 @@ void clientControl(char * handle, int socketNum){
 			exit(-1); 
 		}
 
-        // ----- Read STDIN -----
+    // ----- Read STDIN -----
         if (socketNumber == STDIN_FILENO) {
             // printf("Processing stdin...\n");
             processStdin(handle, socketNum); // Pass the server socket to send user input
         }
-        // ----- Message From Server -----
+    // ----- Message From Server -----
         else if (socketNumber == socketNum) {
             // printf("Processing server message...\n");
             processMsgFromServer(socketNum);
@@ -113,16 +115,16 @@ void initialPacket(int socketNum, char * handle){
     uint8_t pdu[MAXBUF];
     int pduLen = 0;
 
-    // ----- Insert Flag -----
+// ----- Insert Flag -----
     pdu[pduLen] = FLAG_CLIENT_TO_SEVER_INITIAL; // Use the correct flag for initial connection
 	pduLen++;
 
-    // ------ Insert: Handle Length,  Handle -----
+// ------ Insert: Handle Length,  Handle -----
     pdu[pduLen] = handleLength;
 	pduLen++;
     memcpy(pdu + pduLen, handle, handleLength);
 
-    // Send the PDU
+// ----- Send the PDU -----
     if (sendPDU(socketNum, pdu, totalLength) < 0) {
         perror("Failed to send initial connection packet");
         exit(-1);
@@ -180,39 +182,70 @@ char message[MAXBUF];
 
         case 'B':
         case 'b':
-            // broadcast(message);
+            if(data[0] == ' ') {
+                printf("Error: No message provided for broadcast.\n");
+             } else {
+                broadcast(handle, socketNum, data);
+                displayPrompt = false;
+            }
             break;
+
         default:
             printf("Invalid command: %c\n", cmdChar);
             break;
     }
 }
 
-void ccList(char *handle, int socketNum){
+void broadcast(char* handle, int socketNum, char *message){
     uint8_t handleLength = strlen(handle);
     uint8_t pdu[MAXBUF];
     int pduLen = 0;
 
-    // ----- Insert Flag -----
-    pdu[0] = FLAG_LIST; 
+    printf("Broadcasting message from handle: %s\n", handle);
+
+// ----- Insert Flag -----
+    pdu[0] = FLAG_BROADCAST; 
     pduLen++; 
 
-    // ----- Sender: Handle Length, Handle Name -----
+// ----- Sender: Handle Length, Handle Name -----
     pdu[pduLen] = handleLength;
 	pduLen++;
     memcpy(pdu + pduLen, handle, handleLength);
     pduLen += handleLength; 
 
-    // ----- sendPDU -----
-    // printf("PDU Sending....\n"); 
+// ----- Insert Message -----
+    int messageLength = strlen(message); // Get message length
+    memcpy(pdu + pduLen, message, messageLength); 
+    pduLen += messageLength; 
 
+// ----- sendPDU -----
     if (sendPDU(socketNum, pdu, pduLen) < 0) {
         perror("Failed to send PDU");
         exit(-1);
     }
-    // printf("PDU Send\n"); 
-    
+}
 
+
+void ccList(char *handle, int socketNum){
+    uint8_t handleLength = strlen(handle);
+    uint8_t pdu[MAXBUF];
+    int pduLen = 0;
+
+// ----- Insert Flag -----
+    pdu[0] = FLAG_LIST; 
+    pduLen++; 
+
+// ----- Sender: Handle Length, Handle Name -----
+    pdu[pduLen] = handleLength;
+	pduLen++;
+    memcpy(pdu + pduLen, handle, handleLength);
+    pduLen += handleLength; 
+
+// ----- sendPDU -----
+    if (sendPDU(socketNum, pdu, pduLen) < 0) {
+        perror("Failed to send PDU");
+        exit(-1);
+    }
 }
 
 
@@ -262,21 +295,21 @@ void sendMulticast(char *handle, int socketNum, int numHandles, char * message){
     uint8_t pdu[MAXBUF];
     int pduLen = 0;
 
-    // ----- Insert Flag -----
+// ----- Insert Flag -----
     pdu[0] = FLAG_MULTICAST; 
     pduLen++; 
 
-    // ----- Sender: Handle Length, Handle Name -----
+// ----- Sender: Handle Length, Handle Name -----
     pdu[pduLen] = handleLength;
 	pduLen++;
     memcpy(pdu + pduLen, handle, handleLength);
     pduLen += handleLength; 
 
-    // ----- Number of Handles -----
+// ----- Number of Handles -----
     pdu[pduLen] = numHandles;
     pduLen++;
 
-    // ----- Handle Length and Handle Names  -----
+// ----- Handle Length and Handle Names  -----
     int destinationHandleLength = 0; 
     for(int i = 0; i < numHandles; i++){
         destinationHandleLength = strlen(handleNames[i]);
@@ -287,20 +320,17 @@ void sendMulticast(char *handle, int socketNum, int numHandles, char * message){
         printf("Handle %d: %s (Length: %d)\n", i + 1, handleNames[i], destinationHandleLength);
     }
 
-    // ----- Message -----
+// ----- Message -----
     int messageLength = strlen(message); 
     memcpy(pdu + pduLen, message, messageLength); 
     pduLen += messageLength; 
     pdu[pduLen] = '\0';
 
-    // ----- sendPDU -----
-    // printf("PDU Sending....\n"); 
-
+// ----- sendPDU -----
     if (sendPDU(socketNum, pdu, pduLen) < 0) {
         perror("Failed to send PDU");
         exit(-1);
     }
-    // printf("PDU Send\n"); 
 }
 
 
@@ -343,19 +373,19 @@ void sendMessage(char *handle, int socketNum, char *destinationHandle, char *mes
     uint8_t pdu[MAXBUF];
     int pduLen = 0;
 
-    // ----- Insert Flag -----
+// ----- Insert Flag -----
     pdu[0] = FLAG_MESSAGE; 
     pduLen++; 
 
-    // ----- Sender: Handle Length, Handle Name -----
+// ----- Sender: Handle Length, Handle Name -----
     pdu[pduLen++] = handleLength;
     memcpy(pdu + pduLen, handle, handleLength);
     pduLen += handleLength; 
 
-    // ----- M and C bit -----
+// ----- M and C bit -----
     pdu[pduLen++] = 1;  
 
-    // ----- Destination:  Handle Length, Handle Name -----
+// ----- Destination:  Handle Length, Handle Name -----
     uint8_t destinationHandleLength = strlen(destinationHandle); 
 
     pdu[pduLen] = destinationHandleLength; 
@@ -363,13 +393,13 @@ void sendMessage(char *handle, int socketNum, char *destinationHandle, char *mes
     memcpy(pdu + pduLen, destinationHandle, destinationHandleLength); 
     pduLen  += destinationHandleLength; 
 
-    // ----- Message -----
+// ----- Message -----
     uint8_t messageLength = strlen(message); 
     memcpy(pdu + pduLen, message, messageLength); 
     pduLen += messageLength; 
     pdu[pduLen] = '\0';
 
-    // ----- sendPDU -----
+// ----- sendPDU -----
     if (sendPDU(socketNum, pdu, pduLen) < 0) {
         perror("Failed to send PDU");
         exit(-1);
@@ -419,14 +449,12 @@ void checkArgs(int argc, char * argv[])
 
 }
 
-static bool displayPrompt = true;
-
 void processMsgFromServer(int socketNum){
 	uint8_t pdu[MAXBUF] = {0};
 	int pduLen = 0;
 	pduLen = recvPDU(socketNum, pdu, MAXBUF);
     if (pduLen == 0) {  // Server closed the connection
-        printf("---Server Terminated---\n");
+        printf("\n---Server Terminated---\n");
         close(socketNum);
         exit(0);
     } else if (pduLen < 0) {
@@ -503,8 +531,8 @@ void processHandle(uint8_t *pdu, int pduLen, int offset){
 }
 
 void processRecvMessage(uint8_t *pdu, int pduLen, int offset){
-    printf("Message Recieved\n"); 
-    // ----- Sender: Handle Length, Handle name -----
+    // printf("Message Recieved\n"); 
+// ----- Sender: Handle Length, Handle name -----
     uint8_t senderHandleLength = pdu[offset];
     offset++; 
     uint8_t senderHandle[100];
@@ -512,18 +540,18 @@ void processRecvMessage(uint8_t *pdu, int pduLen, int offset){
     senderHandle[senderHandleLength] = '\0'; 
     offset += senderHandleLength; 
 
-    // ----- M and C bit -----
+// ----- M and C bit -----
     // uint8_t mcBit = pdu[offset]; 
     offset++; 
 
-    // ----- Destination:  Handle Length, Handle Name -----
+// ----- Destination:  Handle Length, Handle Name -----
     uint8_t destinationHandleLength = pdu[offset];
     offset++; 
     // uint8_t destinationHandle[100];
     // memcpy(destinationHandle, pdu + offset, destinationHandleLength);
     offset += destinationHandleLength; 
 
-    // ----- Message -----
+// ----- Message -----
     // printf("Offset: %d\tpduLen: %d", offset, pduLen); 
     uint8_t message[100]; 
     memcpy(message, pdu + offset, pduLen - offset); 
