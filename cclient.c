@@ -41,7 +41,7 @@ void sendToServer(int socketNum);
 void checkArgs(int argc, char *argv[]);
 
 char handleNames[MAX_HANDLES][MAX_HANDLE_LENGTH];
-bool waitingServerResponse = false; 
+static bool waitForServerResponse = false;
 
 // ----- Chat Functions -----
 void initialPacket(int socketNum, char * handle);
@@ -58,6 +58,7 @@ void processRecvMessage(uint8_t *pdu, int pduLen, int offset);
 void processHandleError(uint8_t *pdu, int pduLen, int offset) ;
 void processCount(uint8_t *pdu, int pduLen, int offset);
 void processHandle(uint8_t *pdu, int pduLen, int offset); 
+void processHandleReject(uint8_t *pdu, int pduLen, int offset, int socketNum);
 
 int main(int argc, char * argv[])
 {
@@ -79,9 +80,10 @@ void clientControl(char * handle, int socketNum){
 	addToPollSet(socketNum); 	// Monitor server messages
 
 	while(1){
-        if (!waitingServerResponse) {
+        if (waitForServerResponse) {
             printf("$: "); // Display the prompt only if not awaiting response
-        }		fflush(stdout); // Flush the output buffer
+            fflush(stdout); // Flush the output buffer
+        }		
 		
 		int socketNumber = pollCall(-1); 
 		// printf("pollCall returned socketNumber: %d\n", socketNumber);
@@ -136,13 +138,11 @@ void processStdin(char * handle, int socketNum){
 
 	// ----- Check Input -----
     if(sendBuf[1] == 'l' || sendBuf[1] == 'L'){
-            waitingServerResponse = true; 
-            ccList(handle, socketNum);
+        ccList(handle, socketNum);
     } else if (sendBuf[0] == '%' && sendBuf[2] == ' ') {
 		// printf("Command detected.\n");
         char cmdChar = sendBuf[1]; // Assuming command is always one character
         char *message = (char *)sendBuf + 3; // Skipping "%X " to start text after space
-
         // Process command
         processCommand(handle, socketNum, cmdChar, message);
     } else {
@@ -204,13 +204,13 @@ void ccList(char *handle, int socketNum){
     pduLen += handleLength; 
 
     // ----- sendPDU -----
-    printf("PDU Sending....\n"); 
+    // printf("PDU Sending....\n"); 
 
     if (sendPDU(socketNum, pdu, pduLen) < 0) {
         perror("Failed to send PDU");
         exit(-1);
     }
-    printf("PDU Send\n"); 
+    // printf("PDU Send\n"); 
     
 
 }
@@ -419,6 +419,7 @@ void checkArgs(int argc, char * argv[])
 
 }
 
+static bool displayPrompt = true;
 
 void processMsgFromServer(int socketNum){
 	uint8_t pdu[MAXBUF] = {0};
@@ -439,36 +440,51 @@ void processMsgFromServer(int socketNum){
     switch(flag){
         case FLAG_HANDLE_CONFIRM:
             printf("---Valid Username---\n"); 
+            displayPrompt = true;
             break; 
-
         case FLAG_HANDLE_REJECT:
-            printf("---Username take!---\n"); 
-            // Change to printf("Handle already in use: <%s>"); 
+            processHandleReject(pdu, pduLen, offset, socketNum);
+            displayPrompt = true;
             break; 
-
         case FLAG_MESSAGE:
             processRecvMessage(pdu, pduLen, offset); 
+            displayPrompt = true;
             break; 
-
         case FLAG_HANDLE_ERROR:
             processHandleError(pdu, pduLen, offset); 
+            displayPrompt = true;
             break; 
-
         case FLAG_LIST_COUNT:
             processCount(pdu, pduLen, offset); 
+            displayPrompt = false;
             break; 
-
         case FLAG_LIST_HANDLE:
             processHandle(pdu, pduLen, offset); 
+            displayPrompt = false;
             break; 
-
         case FLAG_LIST_END:
-            waitingServerResponse = false; 
+            displayPrompt = true;
             break; 
-
         default:
+            printf("default"); 
+            displayPrompt = true;
             break; 
     }
+    if (displayPrompt) {
+        printf("$: "); // Display the prompt if allowed
+        fflush(stdout);
+    }
+}
+
+void processHandleReject(uint8_t *pdu, int pduLen, int offset, int socketNum){
+    uint8_t handleLen = pdu[offset]; 
+    uint8_t handle[100];
+    offset++; 
+    memcpy(handle, pdu + offset, handleLen); 
+    handle[handleLen] = '\0'; 
+    printf("Handle already in use: %s\n", handle); 
+    close(socketNum);
+    exit(0);
 }
 
 void processCount(uint8_t *pdu, int pduLen, int offset){

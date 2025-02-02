@@ -170,10 +170,10 @@ void processList(int clientSocket, uint8_t *pdu, int pduLen){
         if (handle) {
             len = 0;
             handlePdu[len++] = FLAG_LIST_HANDLE;  // Flag = 12
-            uint8_t handleLen = strlen(handle);
-            handlePdu[len++] = handleLen;
-            memcpy(handlePdu + len, handle, handleLen);
-            len += handleLen;
+            uint8_t handleLength = strlen(handle);
+            handlePdu[len++] = handleLength;
+            memcpy(handlePdu + len, handle, handleLength);
+            len += handleLength;
             sendPDU(clientSocket, handlePdu, len);
             printf("Sent handle [%d]: %s\n", i + 1, handle);
         }
@@ -325,33 +325,30 @@ void processMessage(int clientSocket, uint8_t *pdu, int pduLen){
 
 void initialPacket(int clientSocket, uint8_t *pdu, int pduLen){
     int offset = 1;
-    uint8_t senderHandleLength = pdu[offset];
-    offset++; 
+    uint8_t senderHandleLength = pdu[offset++]; 
     uint8_t senderHandle[100];
     memcpy(senderHandle, pdu + offset, senderHandleLength);
     senderHandle[senderHandleLength] = '\0'; // Always NULL
     
     if (isHandleTaken(handleHead, senderHandle)) {
         printf("Handle '%s' is already taken\n", senderHandle);
-        // Create and send error PDU back to client
-        uint8_t rejectBuffer[MAXBUF];
-        rejectBuffer[0] = FLAG_HANDLE_REJECT;  // Using same flag for consistency
-        rejectBuffer[1] = 0;  // Length of 0 can indicate error
-        sendPDU(clientSocket, rejectBuffer, 2);
-        
-        removeFromPollSet(clientSocket);
-        close(clientSocket);
-        return;
-    }
-    
-    // If handle is not taken, add it to the table
+        uint8_t rejectPdu[MAXBUF];
+        int rejectPduLen = 0;
+        rejectPdu[rejectPduLen++] = FLAG_HANDLE_REJECT;
+        rejectPdu[rejectPduLen++] = senderHandleLength;
+        memcpy(rejectPdu + rejectPduLen, senderHandle, senderHandleLength);
+        rejectPduLen += senderHandleLength;
+        sendPDU(clientSocket, rejectPdu, rejectPduLen);
+    } else {
+        // If handle is not taken, add it to the table
     addHandle(&handleHead, (char *)senderHandle, clientSocket);
-    uint8_t confirmBuffer[MAXBUF];
-    confirmBuffer[0] = FLAG_HANDLE_CONFIRM;  // Using same flag for consistency
-    confirmBuffer[1] = 0;  // Length of 0 can indicate error
-    sendPDU(clientSocket, confirmBuffer, 2);
+    uint8_t confirmPdu[MAXBUF];
+    confirmPdu[0] = FLAG_HANDLE_CONFIRM;  // Using same flag for consistency
+    confirmPdu[1] = 0;  // Length of 0 can indicate error
+    sendPDU(clientSocket, confirmPdu, 2);
 
     printf("Initial packet -- socket %d, handle: %s\n", clientSocket, senderHandle);
+    }
 }
 
 
