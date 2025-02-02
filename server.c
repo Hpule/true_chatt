@@ -42,6 +42,8 @@ int isHandleTaken(HandleNode *head, const uint8_t *handle);
 void initialPacket(int clientSocket, uint8_t *pdu, int pduLen); 
 void processMessage(int clientSocket, uint8_t *pdu, int pduLen); 
 void processMulticast(int clientSocket, uint8_t *pdu, int pduLen); 
+void processList(int clientSocket, uint8_t *pdu, int pduLen); 
+
 void multiSend(); 
 
 char handleNames[MAX_HANDLES][MAX_HANDLE_LENGTH];
@@ -134,10 +136,11 @@ void processClient(int clientSocket){
             break; 
 
         case FLAG_BROADCAST:
+            processList(clientSocket, pdu, pduLen); 
 
             break; 
 
-        case FLAG_REQUEST_LISTEN:
+        case FLAG_LIST:
 
             break;
 
@@ -146,6 +149,40 @@ void processClient(int clientSocket){
             break;
     }    
 }
+
+void processList(int clientSocket, uint8_t *pdu, int pduLen){
+    int handleCount = getNumHandles(handleHead);
+
+    // Send the total number of handles
+    uint32_t networkHandleCount = htonl(handleCount);  // Convert to network byte order
+    uint8_t buffer[1024];
+    int len = 0;
+
+    buffer[len++] = FLAG_LIST_COUNT;  // Flag = 11
+    memcpy(buffer + len, &networkHandleCount, sizeof(networkHandleCount));
+    len += sizeof(networkHandleCount);
+    sendPDU(clientSocket, buffer, len);
+
+    // Send each handle name
+    for (int i = 0; i < handleCount; i++) {
+        const char *handle = getHandleByIndex(handleHead, i);
+        if (handle) {
+            len = 0;
+            buffer[len++] = FLAG_LIST_HANDLE;  // Flag = 12
+            uint8_t handleLen = strlen(handle);
+            buffer[len++] = handleLen;
+            memcpy(buffer + len, handle, handleLen);
+            len += handleLen;
+            sendPDU(clientSocket, buffer, len);
+        }
+    }
+
+    // Send end of list message
+    len = 0;
+    buffer[len++] = FLAG_LIST_END;  // Flag = 13
+    sendPDU(clientSocket, buffer, len);  // No additional data needed for this message
+} 
+
 
 void processMulticast(int clientSocket, uint8_t *pdu, int pduLen){
 	int offset = 1;

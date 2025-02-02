@@ -18,10 +18,10 @@ typedef enum uint8_t {
     FLAG_HANDLE_ERROR = 7,
     FLAG_RESERVED = 8,
     FLAG_RESERVED2 = 9,
-    FLAG_REQUEST_LISTEN = 10,
-    FLAG_LISTEN_COUNT = 11,
-    FLAG_LISTEN_ITEM = 12,
-    FLAG_LISTEN_END = 13,
+    FLAG_LIST = 10,
+    FLAG_LIST_COUNT = 11,
+    FLAG_LIST_HANDLE = 12,
+    FLAG_LIST_END = 13,
 } flagType;
 
 int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData); 

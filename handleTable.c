@@ -98,3 +98,28 @@ void destroyHandleTable(HandleNode *head) {
         current = next;
     }
 }
+
+// Function to retrieve a handle by its index in the linked list
+const char *getHandleByIndex(HandleNode *head, int index) {
+    int currentIndex = 0;
+    HandleNode *current = head;
+    while (current != NULL) {
+        if (currentIndex == index) {
+            return current->handle;
+        }
+        current = current->next;
+        currentIndex++;
+    }
+    return NULL; // Return NULL if the index is out of bounds
+}
+
+// Function to get the number of handles in the linked list
+int getNumHandles(HandleNode *head) {
+    int count = 0;
+    HandleNode *current = head;
+    while (current != NULL) {
+        count++;
+        current = current->next;
+    }
+    return count;
+}

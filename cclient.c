@@ -47,7 +47,7 @@ void initialPacket(int socketNum, char * handle);
 void sendMessage(char *handle, int socketNum, char* destination, char *message); 
 void broadcast(char *sendBuf); 
 void sendMulticast(char *handle, int socketNum, int numHandles, char * message); 
-void ccListen(); 
+void ccList(char *handle, int socketNum); 
 
 // ----- helper Functions -----
 void processCommand(char *handle, int socketNum, char cmdChar, char *text);
@@ -55,6 +55,9 @@ bool parseM(char *data, char *destinationHandle, char *message);
 int parseC(char *data, char *message);  
 void processRecvMessage(uint8_t *pdu, int pduLen, int offset); 
 void processHandleError(uint8_t *pdu, int pduLen, int offset) ;
+void processCount(uint8_t *pdu, int pduLen, int offset);
+void processHandle(uint8_t *pdu, int pduLen, int offset); 
+void processEnd(uint8_t *pdu, int pduLen, int offset); 
 
 int main(int argc, char * argv[])
 {
@@ -179,7 +182,7 @@ char message[MAXBUF];
 
         case 'L':
         case 'l':
-            // ccListen();
+            ccList(handle, socketNum);
             break;
 
         default:
@@ -187,6 +190,34 @@ char message[MAXBUF];
             break;
     }
 }
+
+void ccList(char *handle, int socketNum){
+    uint8_t handleLength = strlen(handle);
+    uint8_t pdu[MAXBUF];
+    int pduLen = 0;
+
+    // ----- Insert Flag -----
+    pdu[0] = FLAG_LIST; 
+    pduLen++; 
+
+    // ----- Sender: Handle Length, Handle Name -----
+    pdu[pduLen] = handleLength;
+	pduLen++;
+    memcpy(pdu + pduLen, handle, handleLength);
+    pduLen += handleLength; 
+
+    // ----- sendPDU -----
+    printf("PDU Sending....\n"); 
+
+    if (sendPDU(socketNum, pdu, pduLen) < 0) {
+        perror("Failed to send PDU");
+        exit(-1);
+    }
+    printf("PDU Send\n"); 
+    
+
+}
+
 
 int parseC(char *data, char *message){
     int numHandles = 0;
@@ -266,13 +297,13 @@ void sendMulticast(char *handle, int socketNum, int numHandles, char * message){
     pdu[pduLen] = '\0';
 
     // ----- sendPDU -----
-    printf("PDU Sending....\n"); 
+    // printf("PDU Sending....\n"); 
 
     if (sendPDU(socketNum, pdu, pduLen) < 0) {
         perror("Failed to send PDU");
         exit(-1);
     }
-    printf("PDU Send\n"); 
+    // printf("PDU Send\n"); 
 }
 
 
@@ -409,8 +440,6 @@ void processMsgFromServer(int socketNum){
 
     uint8_t flag = pdu[0];
     uint8_t offset = 1; 
-    // pdu[pduLen] = '\0';
-
     switch(flag){
         case FLAG_HANDLE_CONFIRM:
             printf("---Valid Username---\n"); 
@@ -429,18 +458,32 @@ void processMsgFromServer(int socketNum){
             processHandleError(pdu, pduLen, offset); 
             break; 
 
-        case FLAG_LISTEN_COUNT:
+        case FLAG_LIST_COUNT:
             break; 
 
-        case FLAG_LISTEN_ITEM:
+        case FLAG_LIST_HANDLE:
             break; 
 
-        case FLAG_LISTEN_END:
+        case FLAG_LIST_END:
             break; 
 
         default:
             break; 
     }
+}
+
+void processCount(uint8_t *pdu, int pduLen, int offset){
+        
+    // printf("Number of Clients on server: %s\n"); 
+}
+
+void processHandle(uint8_t *pdu, int pduLen, int offset){
+
+    // printf("Client: %s\n"); 
+
+}
+
+void processEnd(uint8_t *pdu, int pduLen, int offset){
 }
 
 void processRecvMessage(uint8_t *pdu, int pduLen, int offset){
