@@ -3,7 +3,7 @@
 *
 * Writen by Prof. Smith, updated Jan 2023
 * Use at your own risk.  
-* Test
+* 
 *****************************************************************************/
 
 #include <stdio.h>
@@ -161,12 +161,12 @@ char message[MAXBUF];
         case 'c':
             int numHandles = parseC(data, message); 
             if (numHandles > 0) {
-                // printf("Parsed data successfully. Number of handles: %d\n", numHandles);
-                // printf("Handles:\n");
-                // for (int i = 0; i < numHandles; ++i) {
-                //     printf("%s\n", handleNames[i]);
-                // }
-                // printf("Message: %s\n", message);
+                printf("Parsed data successfully. Number of handles: %d\n", numHandles);
+                printf("Handles:\n");
+                for (int i = 0; i < numHandles; ++i) {
+                    printf("%s\n", handleNames[i]);
+                }
+                printf("Message: %s\n", message);
                 sendMulticast(handle, socketNum, numHandles, message);
 
             }
@@ -260,16 +260,19 @@ void sendMulticast(char *handle, int socketNum, int numHandles, char * message){
     }
 
     // ----- Message -----
-    uint8_t messageLength = strlen(message); 
+    int messageLength = strlen(message); 
     memcpy(pdu + pduLen, message, messageLength); 
     pduLen += messageLength; 
     pdu[pduLen] = '\0';
 
     // ----- sendPDU -----
+    printf("PDU Sending....\n"); 
+
     if (sendPDU(socketNum, pdu, pduLen) < 0) {
         perror("Failed to send PDU");
         exit(-1);
     }
+    printf("PDU Send\n"); 
 }
 
 
@@ -317,14 +320,12 @@ void sendMessage(char *handle, int socketNum, char *destinationHandle, char *mes
     pduLen++; 
 
     // ----- Sender: Handle Length, Handle Name -----
-    pdu[pduLen] = handleLength;
-	pduLen++;
+    pdu[pduLen++] = handleLength;
     memcpy(pdu + pduLen, handle, handleLength);
     pduLen += handleLength; 
 
     // ----- M and C bit -----
-    pdu[pduLen] = 1; 
-    pduLen++; 
+    pdu[pduLen++] = 1;  
 
     // ----- Destination:  Handle Length, Handle Name -----
     uint8_t destinationHandleLength = strlen(destinationHandle); 
@@ -442,8 +443,8 @@ void processMsgFromServer(int socketNum){
     }
 }
 
-
 void processRecvMessage(uint8_t *pdu, int pduLen, int offset){
+    printf("Message Recieved\n"); 
     // ----- Sender: Handle Length, Handle name -----
     uint8_t senderHandleLength = pdu[offset];
     offset++; 

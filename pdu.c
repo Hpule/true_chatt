@@ -30,7 +30,7 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
     // Safe Send 
     int bytesSent  = safeSend(clientSocket, pdu, pduLen, 0);
 
-    // printf("\npduLen: %d\tpdu: %hhn\tlengthNetworkOrder: %d\tbytesSend: %d\n", pduLen, pdu, length_network_order, bytesSent); 
+    printf("\npduLen: %d\tpdu: %hhn\tlengthNetworkOrder: %d\tbytesSend: %d\n", pduLen, pdu, length_network_order, bytesSent); 
 
     if(bytesSent != pduLen ){
         perror("Safe Safe Fail");
@@ -39,8 +39,8 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
     } 
 
     free(pdu); 
-    // printf("\nsendPDU\nclientSocket: %d\tdataBuffer: %s\tlengthOfData: %d\n", 
-        // clientSocket, dataBuffer, lengthOfData); 
+    printf("\nsendPDU\nclientSocket: %d\tdataBuffer: %s\tlengthOfData: %d\n", 
+        clientSocket, dataBuffer, lengthOfData); 
 
     return bytesSent;  
 }
@@ -79,8 +79,8 @@ int  recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
         return -1; // Error
     }
 
-    // printf("\nrecvPDU\nclientSocket: %d\tdataBuffer: %s\tlengthOfData: %d\n",
-        // socketNumber, dataBuffer, bytesReceived); 
+    printf("\nrecvPDU\nclientSocket: %d\tdataBuffer: %s\tlengthOfData: %d\n",
+        socketNumber, dataBuffer, bytesReceived); 
 
     return bytesReceived ;
 }
