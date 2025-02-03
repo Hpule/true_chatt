@@ -176,7 +176,6 @@ uint8_t handlePdu[MAXBUF];
         handlePdu[handlePduLen++] = senderHandleLength;
         memcpy(handlePdu + handlePduLen, senderHandle, senderHandleLength);
         handlePduLen += senderHandleLength;
-
         handlePdu[handlePduLen++] = 1; 
 
         // Include the destination handle
