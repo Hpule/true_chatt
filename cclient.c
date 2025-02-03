@@ -120,12 +120,10 @@ void initialPacket(int socketNum, char * handle){
     int pduLen = 0;
 
 // ----- Insert Flag -----
-    pdu[pduLen] = FLAG_CLIENT_TO_SEVER_INITIAL; // Use the correct flag for initial connection
-	pduLen++;
+    pdu[pduLen++] = FLAG_CLIENT_TO_SEVER_INITIAL; // Use the correct flag for initial connection
 
 // ------ Insert: Handle Length,  Handle -----
-    pdu[pduLen] = handleLength;
-	pduLen++;
+    pdu[pduLen++] = handleLength;
     memcpy(pdu + pduLen, handle, handleLength);
 
 // ----- Send the PDU -----
@@ -139,16 +137,16 @@ void initialPacket(int socketNum, char * handle){
 void processStdin(char * handle, int socketNum){
     uint8_t sendBuf[RECV_MAXBUF];   // Adjust this if needed to MAX_INPUT_SIZE
     int sendLen = 0;
-
-    printf("Enter your command or message: ");
     sendLen = readFromStdin(sendBuf);
-    if (sendLen > 1) { // Check for more than just a newline
+
+    if ((sendBuf[1] == 'l' || sendBuf[1] == 'L') && sendBuf[0] == '%') {
+    ccList(handle, socketNum);
+    }
+    else if (sendLen > 1) { // Check for more than just a newline
         sendBuf[sendLen - 1] = '\0'; // Remove the trailing newline added by readFromStdin
 
         // Check Input
-        if (sendBuf[0] == 'l' || sendBuf[0] == 'L') {
-            ccList(handle, socketNum);
-        } else if (sendBuf[0] == '%' && sendBuf[2] == ' ') {
+        if (sendBuf[0] == '%' && sendBuf[2] == ' ') {
             char cmdChar = sendBuf[1];
             char *message = (char *)sendBuf + 3; // Skipping "%X " to start text after space
             processCommand(handle, socketNum, cmdChar, message);
@@ -316,31 +314,36 @@ char message[SEND_MAXBUF];
 // ----- Send Functions -----
 
 void broadcast(char* handle, int socketNum, char *message){
+    uint8_t messageLength = strlen(message); 
     uint8_t handleLength = strlen(handle);
-    uint8_t pdu[SEND_MAXBUF];
-    int pduLen = 0;
+    int offset = 0; 
 
     printf("Broadcasting message from handle: %s\n", handle);
 
+    while(offset < messageLength){
+        uint8_t pdu[SEND_MAXBUF];
+        int pduLen = 0;
+
 // ----- Insert Flag -----
-    pdu[0] = FLAG_BROADCAST; 
-    pduLen++; 
+        pdu[pduLen++] = FLAG_BROADCAST;  
 
 // ----- Sender: Handle Length, Handle Name -----
-    pdu[pduLen] = handleLength;
-	pduLen++;
-    memcpy(pdu + pduLen, handle, handleLength);
-    pduLen += handleLength; 
+        pdu[pduLen++] = handleLength;
+        memcpy(pdu + pduLen, handle, handleLength);
+        pduLen += handleLength; 
 
 // ----- Insert Message -----
-    int messageLength = strlen(message); // Get message length
-    memcpy(pdu + pduLen, message, messageLength); 
-    pduLen += messageLength; 
+        int currentLength = (messageLength - offset > MAX_MESSAGE_SIZE ) ? MAX_MESSAGE_SIZE : messageLength - offset; 
+        memcpy(pdu + pduLen, message + offset, currentLength); 
+        pduLen += currentLength; 
 
 // ----- sendPDU -----
-    if (sendPDU(socketNum, pdu, pduLen) < 0) {
-        perror("Failed to send PDU");
-        exit(-1);
+        if (sendPDU(socketNum, pdu, pduLen) < 0) {
+            perror("Failed to send PDU");
+            exit(-1);
+        }
+        offset += currentLength;
+
     }
 }
 
@@ -351,12 +354,10 @@ void ccList(char *handle, int socketNum){
     int pduLen = 0;
 
 // ----- Insert Flag -----
-    pdu[0] = FLAG_LIST; 
-    pduLen++; 
+    pdu[pduLen++] = FLAG_LIST; 
 
 // ----- Sender: Handle Length, Handle Name -----
-    pdu[pduLen] = handleLength;
-	pduLen++;
+    pdu[pduLen++] = handleLength;
     memcpy(pdu + pduLen, handle, handleLength);
     pduLen += handleLength; 
 
