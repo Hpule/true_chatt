@@ -15,7 +15,7 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
     int pduLen = lengthOfData + 2; 
 
     // length -> network order Bufferdata
-    uint16_t length_network_order = htons(lengthOfData);
+    uint16_t length_network_order = htons(pduLen);
 
     // data buffer memcpy
     uint8_t * pdu = (uint8_t * )malloc(pduLen);    
@@ -30,7 +30,7 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
     // Safe Send 
     int bytesSent  = safeSend(clientSocket, pdu, pduLen, 0);
 
-    // printf("\npduLen: %d\tpdu: %hhn\tlengthNetworkOrder: %d\tbytesSend: %d\n", pduLen, pdu, length_network_order, bytesSent); 
+    // printf("\npduLen: %d\tpdu: %s\tlengthNetworkOrder: %d\tbytesSend: %d\n", pduLen, pdu, length_network_order, bytesSent); 
 
     if(bytesSent != pduLen ){
         perror("Safe Safe Fail");
@@ -38,11 +38,15 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
         return -1;  
     } 
 
-    free(pdu); 
-    // printf("\nsendPDU\nclientSocket: %d\tdataBuffer: %s\tlengthOfData: %d\n", 
-    //     clientSocket, dataBuffer, lengthOfData); 
+    printf("\nsendPDU\nclientSocket: %d\tdataBuffer: %s\tlengthOfData: %d\n", 
+        clientSocket, dataBuffer, bytesSent); 
+    for (int i = 0; i < bytesSent; i++) {
+        printf("%02X ", pdu[i]);  // Print byte in hex format
+    }
+    printf("\n");  // Newline for neatness
 
-    return bytesSent;  
+    free(pdu); 
+    return bytesSent - 2;  
 }
 
 int  recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
@@ -59,7 +63,7 @@ int  recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
     }
 
     // Convert length field from network byte order to host byte order
-    int length_host_order = ntohs(lengthField);
+    int length_host_order = ntohs(lengthField) - 2;
 
     // Step 2: Validate the length
     if (length_host_order <= 0 || length_host_order > bufferSize) {
@@ -82,5 +86,10 @@ int  recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
     // printf("\nrecvPDU\nclientSocket: %d\tdataBuffer: %s\tlengthOfData: %d\n",
     //     socketNumber, dataBuffer, bytesReceived); 
 
-    return bytesReceived ;
+    for (int i = 0; i < bytesReceived; i++) {
+        printf("%02X ", dataBuffer[i]);  // Print byte in hex format
+    }
+    printf("\n");  // Newline for neatness
+
+    return length_host_order ;
 }

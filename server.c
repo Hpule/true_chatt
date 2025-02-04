@@ -44,12 +44,8 @@ void processMessage(int clientSocket, uint8_t *pdu, int pduLen);
 void processMulticast(int clientSocket, uint8_t *pdu, int pduLen); 
 void processList(int clientSocket, uint8_t *pdu, int pduLen); 
 void processBroadcast(int clientSocket, uint8_t *pdu, int pduLen);
-
-void multiSend(); 
-
 char handleNames[MAX_HANDLES][MAX_HANDLE_LENGTH];
 HandleNode *handleHead = NULL; 
-
 
 int main(int argc, char *argv[])
 {
@@ -144,7 +140,7 @@ void processClient(int clientSocket){
 void processBroadcast(int clientSocket, uint8_t *pdu, int pduLen){
     int offset = 1;
 
-    // ----- Sender: Handle Length, Handle name -----
+// ----- Sender: Handle Length, Handle name -----
     uint8_t senderHandleLength = pdu[offset++];
     uint8_t senderHandle[100];
     memcpy(senderHandle, pdu + offset, senderHandleLength);
@@ -152,14 +148,14 @@ void processBroadcast(int clientSocket, uint8_t *pdu, int pduLen){
     offset += senderHandleLength; 
     printf("Broadcast from [%s] (Length: %u)\n", senderHandle, senderHandleLength);
 
-    // ----- Message -----
+// ----- Message -----
     uint8_t message[100];    
     int messageLength = pduLen - offset;
     memcpy(message, pdu + offset, messageLength); 
     message[messageLength] = '\0'; 
     printf("Message received: %s\n", message);
 
-    // Get current handles count and broadcast to all except sender
+// Get current handles count and broadcast to all except sender
     int handleCount = getNumHandles(handleHead);
     printf("Total handles to receive broadcast: %d\n", handleCount);
 
@@ -168,31 +164,10 @@ void processBroadcast(int clientSocket, uint8_t *pdu, int pduLen){
         int destSocket = findSocketByHandle(handleHead, handle);
 
         if (destSocket != clientSocket) { // Do not send back to the sender
-uint8_t handlePdu[MAXBUF];
-        int handlePduLen = 0;
-        handlePdu[handlePduLen++] = FLAG_MESSAGE;
-
-        // Include the sender handle
-        handlePdu[handlePduLen++] = senderHandleLength;
-        memcpy(handlePdu + handlePduLen, senderHandle, senderHandleLength);
-        handlePduLen += senderHandleLength;
-        handlePdu[handlePduLen++] = 1; 
-
-        // Include the destination handle
-        int destinationHandleLength = strlen(handle);
-        handlePdu[handlePduLen++] = destinationHandleLength;
-        memcpy(handlePdu + handlePduLen, handle, destinationHandleLength);
-        handlePduLen += destinationHandleLength;
-
-        // Include the message
-        memcpy(handlePdu + handlePduLen, message, pduLen - offset);
-        handlePduLen += pduLen - offset;
-
         // Send the constructed PDU
         int destSocket = findSocketByHandle(handleHead, handle);
         printf("Sending multicast message to: %s (Socket: %d)\n", handle, destSocket);
-
-        sendPDU(destSocket, handlePdu, handlePduLen);
+        sendPDU(destSocket, pdu, pduLen);
         }
     }
 }
@@ -201,7 +176,6 @@ uint8_t handlePdu[MAXBUF];
 void processList(int clientSocket, uint8_t *pdu, int pduLen){
     int handleCount = getNumHandles(handleHead);
     printf("Starting to process the list of handles. Total handles: %d\n", handleCount);
-
     // Send the total number of handles
     uint32_t networkHandleCount = htonl(handleCount);  // Convert to network byte order
     uint8_t initialPdu[1024];
@@ -227,7 +201,6 @@ void processList(int clientSocket, uint8_t *pdu, int pduLen){
             printf("Sent handle [%d]: %s\n", i + 1, handle);
         }
     }
-
     // Send end of list flag
     uint8_t lastPdu[MAXBUF];
     len = 0;
@@ -239,26 +212,17 @@ void processList(int clientSocket, uint8_t *pdu, int pduLen){
 
 void processMulticast(int clientSocket, uint8_t *pdu, int pduLen){
 	int offset = 1;
-
 // ----- Sender: Handle Length, Handle name -----
     uint8_t senderHandleLength = pdu[offset++]; 
     uint8_t senderHandle[100];
     memcpy(senderHandle, pdu + offset, senderHandleLength);
-
     senderHandle[senderHandleLength] = '\0';                
     offset += senderHandleLength; 
-    printf("Sender Handle: %s (Length: %u)\n", senderHandle, senderHandleLength);
-
 // ----- Number of handles -----
     int numHandles = pdu[offset++];                           
-    printf("Number of destination handles: %d\n", numHandles);
-
 // ----- Destination:  Handle Lengths, Handle Names -----
-
-    int destinationHandleLength;   
     char handleNames[MAX_HANDLES][100];  // Adjust MAX_HANDLES as needed
     int validHandlesCount = 0;
-
 // ----- Validate each destination handle
     for (int i = 0; i < numHandles; i++) {
         uint8_t destinationHandleLength = pdu[offset++];
@@ -272,8 +236,8 @@ void processMulticast(int clientSocket, uint8_t *pdu, int pduLen){
             strcpy(handleNames[validHandlesCount++], destinationHandle);
             printf("Valid handle added: %s\n", destinationHandle);
 
-        } else {
             // Prepare and send an error PDU for the first invalid handle found
+        } else {
             uint8_t errorPDU[MAXBUF];
             int errorPDULen = 0;
             errorPDU[errorPDULen++] = FLAG_HANDLE_ERROR;
@@ -282,42 +246,14 @@ void processMulticast(int clientSocket, uint8_t *pdu, int pduLen){
             errorPDULen += destinationHandleLength;
             sendPDU(clientSocket, errorPDU, errorPDULen);
             printf("Invalid handle found, error PDU sent for: %s\n", destinationHandle);
-             // Stop processing further
         }
     }
-
-// ----- Message -----
-    uint8_t message[100];    
-    memcpy(message, pdu + offset, pduLen - offset); 
-    message[pduLen - offset] = '\0'; 
 // ----- Send  message to  valid handles -----
     for (int i = 0; i < validHandlesCount; i++) {
-        uint8_t handlePdu[MAXBUF];
-        int handlePduLen = 0;
-        handlePdu[handlePduLen++] = FLAG_MESSAGE;
-
-        // Include the sender handle
-        handlePdu[handlePduLen++] = senderHandleLength;
-        memcpy(handlePdu + handlePduLen, senderHandle, senderHandleLength);
-        handlePduLen += senderHandleLength;
-
-        handlePdu[handlePduLen++] = 1; 
-
-        // Include the destination handle
-        destinationHandleLength = strlen(handleNames[i]);
-        handlePdu[handlePduLen++] = destinationHandleLength;
-        memcpy(handlePdu + handlePduLen, handleNames[i], destinationHandleLength);
-        handlePduLen += destinationHandleLength;
-
-        // Include the message
-        memcpy(handlePdu + handlePduLen, message, pduLen - offset);
-        handlePduLen += pduLen - offset;
-
         // Send the constructed PDU
         int destSocket = findSocketByHandle(handleHead, handleNames[i]);
         printf("Sending multicast message to: %s (Socket: %d)\n", handleNames[i], destSocket);
-
-        sendPDU(destSocket, handlePdu, handlePduLen);
+        sendPDU(destSocket, pdu, pduLen);
     }
 }
 
@@ -325,20 +261,15 @@ void processMulticast(int clientSocket, uint8_t *pdu, int pduLen){
 
 void processMessage(int clientSocket, uint8_t *pdu, int pduLen){
 	int offset = 1;
-
 // ----- Sender: Handle Length, Handle name -----
     uint8_t senderHandleLength = pdu[offset];
     offset++; 
     uint8_t senderHandle[100];
     memcpy(senderHandle, pdu + offset, senderHandleLength);
-
 // ----- Sender: Handle Length, Handle name -----
     offset += senderHandleLength; 
-
 // ----- M and C bit -----
-    // uint8_t mcBit = pdu[offset]; 
     offset++; 
-
 // ----- Destination:  Handle Length, Handle Name -----
     uint8_t destinationHandleLength = pdu[offset];
     offset++; 
@@ -346,7 +277,6 @@ void processMessage(int clientSocket, uint8_t *pdu, int pduLen){
     memcpy(destinationHandle, pdu + offset, destinationHandleLength);
     destinationHandle[destinationHandleLength] = '\0'; // Always NULL
     offset += destinationHandleLength; 
-
 // ----- Check Destination Handle -----
     const char *handle = findHandle(handleHead, (char *)destinationHandle);
     printf("handle: %s, Dest handle: %s\n", handle, destinationHandle ); 
