@@ -270,11 +270,14 @@ bool parseM(char *data, char *destinationHandle, char *message){
 
 void processCommand(char * handle, int socketNum, char cmdChar, char *data) {
 char message[SEND_MAXBUF];
+            
+    char destinationHandle[100];
+    int numHandles = parseC(data, message); 
+
 
     switch (cmdChar) {
         case 'M':
         case 'm':
-            char destinationHandle[100];
             if (parseM(data, destinationHandle, message)) {
                 printf("Dest Handle: %s\t Message: %s\n", destinationHandle, message);
                 sendMessage(handle, socketNum, destinationHandle, message);
@@ -283,7 +286,6 @@ char message[SEND_MAXBUF];
 
         case 'C':
         case 'c':
-            int numHandles = parseC(data, message); 
             if (numHandles > 0) {
                 printf("Parsed data successfully. Number of handles: %d\n", numHandles);
                 printf("Handles:\n");
